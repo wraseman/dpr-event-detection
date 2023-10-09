@@ -213,6 +213,13 @@ def check_tagids_missing_from_sql(engine, df, table, datetime_col, datetime_star
     logger.info('compare_sql_config_tags(): querying TagIDs from SQL database.')
     query1 = f'SELECT DISTINCT TagID FROM {table} WHERE {datetime_col} >= \'{datetime_start}\' AND {datetime_col} < \'{datetime_end}\''
     df_sql = pd.read_sql(query1, engine)
+
+    # Convert TagID to int
+    try:
+        df_sql['TagID'] = df_sql['TagID'].astype(int)
+    except:
+        logger.warning(f'compare_sql_config_tags(): Warning! TagID cannot be converted into int.')
+
     sql_tagids = set(df_sql['TagID'])  # convert from dataframe to a set
 
     ## Get a set of TagIDs from config file
@@ -257,12 +264,18 @@ def create_df_from_sql(engine, table, datetime_start, datetime_end, tagid_set, d
     
     # Convert set to a string to pass to SQL query
     tagid_str = '(' + ', '.join(str(e) for e in tagid_set) + ')'
-    print(tagid_str)
+    
     # Set up query
-    query= f'SELECT TagID, DateTime, Value FROM {table} WHERE {datetime_col} >= \'{datetime_start}\' AND {datetime_col} < \'{datetime_end}\' AND TagID IN {tagid_str}'
+    query= f'SELECT * FROM {table} WHERE {datetime_col} >= \'{datetime_start}\' AND {datetime_col} < \'{datetime_end}\' AND TagID IN {tagid_str}'
 
     # Use pandas to query the database and return a pandas dataframe
     sql_df = pd.read_sql(query, engine)
+
+    # Convert TagID to int
+    try:
+        sql_df['TagID'] = sql_df['TagID'].astype(int)
+    except:
+        logger.warning(f'create_df_from_sql(): Warning! TagID cannot be converted into int.')
 
     if datetime_col == '[DateTime]':
         sql_df = sql_df.rename(columns={'DateTime':'Datetime'})
@@ -275,7 +288,10 @@ def create_df_from_sql(engine, table, datetime_start, datetime_end, tagid_set, d
     if sql_df.empty:
         logger.error(f'create_df_from_sql(): Error! No data found in {table} between {datetime_start} and {datetime_end}. Exiting program.')
         sys.exit()
-
+        
+    # Drop duplicates
+    sql_df = sql_df.drop_duplicates(subset=['TagID','Datetime'], keep='first').reset_index(drop=True)
+    
     return sql_df
 
 def check_for_missing_status_tag(df_wide, tag):
@@ -334,7 +350,7 @@ def check_all_tags_missing_for_event(df_wide, tag_dict, tagids):
     else:
         return False
     
-def create_primary_event_tags_dict(event_dict, tag_dict, name_ro_process, name_ro_monitoring, name_ro_wq1, name_ozone_wq1):
+def create_primary_event_tags_dict(event_dict, tag_dict, name_ro_process, name_ro_monitoring, name_ro_wq1, name_ozone_wq1, name_ozone_monitoring):
     """
     Create a dictionary of eventid:primary event tag. The primary event tag is the tag that is used to determine if the event is occurring or not.
 
@@ -362,12 +378,15 @@ def create_primary_event_tags_dict(event_dict, tag_dict, name_ro_process, name_r
                 primary_event_tags[eventid] = name_ro_monitoring
             elif eventid == 7:
                 primary_event_tags[eventid] = name_ro_wq1
+            elif eventid == 14:
+                primary_event_tags[eventid] = name_ozone_monitoring
             elif eventid == 15:
                 primary_event_tags[eventid] = name_ozone_wq1
             else: 
                 logger.warning(f'create_primary_event_tags_dict(): Event {eventid} has multiple tags but no primary event tag has been defined.')
         else:
-            primary_event_tags[eventid] = None            
+            primary_event_tags[eventid] = None       
+            # logger.warning(f'create_primary_event_tags_dict(): Event {eventid} has no tags.')
     
     return primary_event_tags
     

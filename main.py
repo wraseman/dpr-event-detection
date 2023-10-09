@@ -18,6 +18,7 @@ from library import *
 
 # Common Python packages
 from loguru import logger
+import warnings
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -37,8 +38,15 @@ from plyer import notification
 # 5. Performing quality control on time series data
 
 ############################################# USER INPUTS #############################################
+
+## User defined date range
+event_window_hrs = 1  # hours (during live mode, how many hours to include in event monitoring)
+end_datetime = datetime.now()  # live mode
+start_datetime =  end_datetime - timedelta(hours = event_window_hrs)  # live mode
+# start_datetime = datetime(2023, 6, 8, 14, 0, 0)  # historical mode (year, month, day, hour, minute, second)
+# end_datetime = datetime(2023, 6, 8, 23, 59, 59)  # historical mode (year, month, day, hour, minute, second)
+
 ## SQL database connection information
-# NOTE REMOVED DATABASE CONNECTION INFO
 server = 
 database = 
 username = 
@@ -47,40 +55,26 @@ driver =
 table = 
 datetime_col = 
 
-## User defined run mode and outputs
+## User defined paths
+path_working = r"C:\Users\HMI103\Desktop\DPR Event Monitoring\live"
+path_config = os.path.join(path_working, 'config.xlsx')
+path_events_json = os.path.join(path_working, 'events.json')
+path_dashboard_html = os.path.join(path_working, 'dashboard.html')
+results_directory = os.path.join(path_working, 'dashboard')
+
+## Outputs
 save_plots = True  # save plots as png files
 notify = True  # send notifications
-# run_now = False  # run script in live mode (True) or historical mode (False)
-
-## User defined paths
-path_config = r"C:\Users\WRaseman\OneDrive - Hazen and Sawyer\Projects - Active\70047-000 WRF 4954 Reuse Data\Data Analysis\2023-06-05 Deployment\config.xlsx"
-results_directory = 'example_1'  # name of results directory
-path_working = os.getcwd()
-path_events_json = os.path.join(path_working, 'events.json')
-
-# ## User defined parameters
-# ## Note: most data beings the week of September 12, 2022. 
-# ##  Additional tags for ozone and RO were added the week of March 20, 2023 and in June 2023. 
-# user_datetime_start = "5/24/2023 12:00:00"  # start datetime for historical mode
-# user_datetime_end = "5/24/2023 14:00:00"  # end datetime for historical mode
 
 ############################################# END USER INPUTS #########################################
 
 def main (): 
 
-    # # Use current datetime if run_now == True, otherwise use user input
-    # if run_now == True:
-    #     datetime_start_init = datetime.now() - timedelta(days=0.5)  # start datetime for live mode
-    #     datetime_start_round = datetime_start_init.replace(second=0, microsecond=0)
-    #     datetime_start = datetime.strftime(datetime_start_round, '%Y-%m-%d %H:%M:%S')
-
-    #     datetime_end_init = datetime.now()  # end datetime for live mode
-    #     datetime_end_round = datetime_end_init.replace(second=0, microsecond=0)
-    #     datetime_end = datetime.strftime(datetime_end_round, '%Y-%m-%d %H:%M:%S')
-
-    # else:  # user input for historical mode
-    datetime_start = user_datetime_start
-    datetime_end = user_datetime_end
+    # Reformat datetime for SQL query
+    datetime_start_str = start_datetime.strftime("%Y-%m-%d %H:%M:%S")
+    datetime_end_str = end_datetime.strftime("%Y-%m-%d %H:%M:%S")
+    datetime_start = datetime_start_str
+    datetime_end = datetime_end_str
 
     # Check that datetime_start and datetime_end are in the correct format
     datetime_start = check_datetime_format(datetime_start)
@@ -121,7 +115,7 @@ def main ():
     df = create_df_from_sql(engine, table, datetime_start, datetime_end, tagid_set, datetime_col)
 
     # Add Tag to SQL data based on TagID using the tag_dict dictionary
-    df['Tag'] = df['TagID'].map(tag_dict)
+    df['Tag'] = df['TagID'].map(tag_dict)   
     df1 = df[['Datetime', 'Tag', 'Value']]  # only keep Datetime, Tag, and Value columns
 
     # Pivot dataframe to wide format (required for Pecos logic)
@@ -159,7 +153,7 @@ def main ():
 
     # For tags related to error or difference calculations, modify the data to be the absolute value of error/difference. 
     # This is to ensure that the data is always positive to avoid errors in the Pecos logic.
-    tags_err_diff = [tag_dict[86], tag_dict[67], tag_dict[91], tag_dict[92]]
+    tags_err_diff = [tag_dict[86], tag_dict[67], tag_dict[68], tag_dict[92]]
     logger.info(f'Modifying data for error/difference tags. Calculating absolute value for {tags_err_diff}.')
 
     for tag in tags_err_diff:
@@ -199,35 +193,43 @@ def main ():
     # Ozone events: create calculated columns for Ozone events
     logger.info('Creating calculated columns for Ozone events.')
     name_ozone_wq1 = 'Ozone Water Quality Event'
+    name_ozone_monitoring = 'Ozone Monitoring Event'
 
     # Create new column for Ozone Water Quality event:
 
-    # Write code to create a tictactoe game
-    
-
-    # If OSP 4 Hach Meter and rolling average difference is LESS than 10%, 
-    # and OSP 7 Hach Meter and rolling average difference is LESS than 10%,
-    # and ozone production error is LESS than 10%, 
+    # If OSP 4 Hach Meter and Rosemount meter difference is LESS than 15%, 
+    # and OSP 7 Hach Meter and Rosemount meter difference is LESS than 15%,
+    # and ozone production error is LESS than 5%, 
     # and ozone demand is greater than 6.0 mg/L, 
     # then Ozone Water Quality = 1, else 0.
-    # If any values are empty, assume they violate the condition.
-    cond1 = (df_wide[tag_dict[91]] < 0.1)  # don't apply missing value logic here
-    cond2 = (df_wide[tag_dict[92]] < 0.1)  # don't apply missing value logic here
-    cond3 = (df_wide[tag_dict[86]] < 0.1)  # don't apply missing value logic here
-    cond4 = (df_wide[tag_dict[59]] > 6.0) | (df_wide[tag_dict[59]].isna())
-    df_wide[name_ozone_wq1] = np.where(cond1 & cond2 & cond3 & cond4, 1, 0)
-    del cond1, cond2, cond3, cond4
-
+    cond1 = (df_wide[tag_dict[67]] < 0.15)  # don't apply missing value logic here
+    #cond2 = (df_wide[tag_dict[68]] < 0.15)  # don't apply missing value logic here #archived condition 7.6.23
+    cond3 = (df_wide[tag_dict[86]] < 0.05)  # don't apply missing value logic here
+    cond4 = (df_wide[tag_dict[59]] > 6.5) | (df_wide[tag_dict[59]].isna())
+    #df_wide[name_ozone_wq1] = np.where(cond1 & cond2 & cond3 & cond4, 1, 0)#archived condition2 7.6.23
+    #del cond1, cond2, cond3, cond4 #archived condition2 7.6.23
+    df_wide[name_ozone_wq1] = np.where(cond1 & cond3 & cond4, 1, 0)
+    del cond1, cond3, cond4
+    
+    # Create new column for Ozone Monitoring event: 
+    # If Ozone Normalized Difference (Across Meters) OSP 4 (decimal) is less than 0.15
+    # or Ozone Normalized Difference (Across Meters) OSP 7 (decimal) is less than 0.15
+    # then Ozone Montoring = 1, else 0.
+    cond1 = (df_wide[tag_dict[67]] > 0.15) | (df_wide[tag_dict[67]].isna())
+    cond2 = (df_wide[tag_dict[68]] > 0.15) | (df_wide[tag_dict[68]].isna())
+    df_wide[name_ozone_monitoring] = np.where(cond1 | cond2, 1, 0)
+    del cond1, cond2
+    
     # Create dashboard based on Pecos results
     dashboard_content = {} # Initialize the dashboard content dictionary
     logger.info('Implementing Pecos tests.')
 
     # Create dictionary of primary event tags (the ones that are used to determine if an event is occurring)
-    primary_event_tags = create_primary_event_tags_dict(event_dict, tag_dict, name_ro_process, name_ro_monitoring, name_ro_wq1, name_ozone_wq1)
+    primary_event_tags = create_primary_event_tags_dict(event_dict, tag_dict, name_ro_process, name_ro_monitoring, name_ro_wq1, name_ozone_wq1, name_ozone_monitoring)
 
     # Loop through the events in df_events
     list_detected_events = [] # Initialize list of detected events
-    num_events = df_events.shape[0]
+    num_events = df_events.shape[0]    
     for i in range(0, num_events):
 
         ## Get values for this EventID from df_events
@@ -251,6 +253,8 @@ def main ():
             event_tags.insert(0, name_ro_monitoring)
         elif eventid == 7:
             event_tags.insert(0, name_ro_wq1)
+        elif eventid == 14:
+            event_tags.insert(0, name_ozone_monitoring)
         elif eventid == 15:
             event_tags.insert(0, name_ozone_wq1)
 
@@ -266,24 +270,23 @@ def main ():
             df_wide_event = df_wide[event_and_status_tags]  # subset data to only include tags for this event
             pm.add_dataframe(df_wide_event)  # add data to Pecos object
 
-            ## Timefilter
-            time_filter_system = pm.data[tag_plant_status] == 1
-            pm.add_time_filter(time_filter_system)  # add time filter when plantwide status is not 1 (normal)
-
             ## Check missing data
             pm = pecos_check_missing(pm, event_tags)
 
-            # Apply process-specific time filters
+            # Apply time filters
+            time_filter_system = pm.data[tag_plant_status] == 1
             if event_process == 'MF':
                 # Filter based on MF process status (if not in production)
-                time_filter_process1 = pm.data[tag_mf_status] == 1
-                pm.add_time_filter(time_filter_process1)
+                time_filter_mf = pm.data[tag_mf_status] == 1
+                pm.add_time_filter(time_filter_system & time_filter_mf)
             elif event_process == 'Ozone':
                 # Filter based on BAC process status (if not in production)
-                time_filter_process1 = pm.data[tag_bac1_status] == 1
-                pm.add_time_filter(time_filter_process1)
-                time_filter_process2 = pm.data[tag_bac2_status] == 1
-                pm.add_time_filter(time_filter_process2)
+                time_filter_bac1 = pm.data[tag_bac1_status].isin([1, 0])
+                time_filter_bac2 = pm.data[tag_bac2_status].isin([1, 0])
+                pm.add_time_filter(time_filter_system & time_filter_bac1 & time_filter_bac2)
+            else:
+                # If not MF or Ozone, filter based on plantwide status (if not in production)
+                pm.add_time_filter(time_filter_system)
 
             # Apply Pecos tests for each EventID
             if eventid == 1: 
@@ -292,12 +295,12 @@ def main ():
 
             elif eventid == 2: 
                 # MF Monitoring
-                pm.check_increment(key=tag_dict[10], bound=[0.0001, None], min_failures=30)
+                pm.check_increment(key=tag_dict[10], bound=[0.0001, None], min_failures=15)
 
             elif eventid == 5: 
                 # RO Process event
-                pm.check_range(key=name_ro_process, bound=[None, 0], min_failures=30)
-                pm.check_range(key=tag_dict[15], bound=[None, 50], min_failures=30) 
+                pm.check_range(key=name_ro_process, bound=[None, 0], min_failures=15)
+                pm.check_range(key=tag_dict[15], bound=[None, 50], min_failures=15) 
                 pm.check_range(key=tag_dict[29], bound=[None, 125], min_failures=15) 
                 pm.check_range(key=tag_dict[31], bound=[None, 125], min_failures=15)
 
@@ -309,8 +312,8 @@ def main ():
         
             elif eventid == 7:
                 # RO Water Quality 1 event
-                pm.check_range(key=name_ro_wq1, bound=[None, 0], min_failures=30) 
-                pm.check_range(key=tag_dict[15], bound=[None, 50], min_failures=30)
+                pm.check_range(key=name_ro_wq1, bound=[None, 0], min_failures=15) 
+                pm.check_range(key=tag_dict[15], bound=[None, 50], min_failures=15)
                 pm.check_range(key=tag_dict[29], bound=[125, None], min_failures=5)
                 pm.check_range(key=tag_dict[31], bound=[125, None], min_failures=5)  
 
@@ -320,7 +323,6 @@ def main ():
 
             elif eventid == 10:
                 # UVAOP Monitoring
-                # pm.check_increment(key=tag_dict[65], bound=[0.01, None], min_failures=15)  / in documentation
                 pm.check_increment(key=tag_dict[65], bound=[0.01, None], min_failures=30) 
 
             elif eventid == 11:
@@ -337,15 +339,17 @@ def main ():
 
             elif eventid == 14:
                 # Ozone Monitoring
-                pm.check_range(key=tag_dict[67], bound=[None, 0.1], min_failures=15)
+                pm.check_range(key=name_ozone_monitoring, bound=[None, 0], min_failures=15)
+                pm.check_range(key=tag_dict[67], bound=[None, 0.15], min_failures=15)
+                pm.check_range(key=tag_dict[68], bound=[None, 0.15], min_failures=15)
 
             elif eventid == 15:
                 # Ozone Water Quality 1
                 pm.check_range(key=name_ozone_wq1, bound=[None, 0], min_failures=15)
-                pm.check_range(key=tag_dict[91], bound=[0.1, None], min_failures=2)
-                pm.check_range(key=tag_dict[92], bound=[0.1, None], min_failures=2)
-                pm.check_range(key=tag_dict[86], bound=[0.1, None], min_failures=2)
-                pm.check_range(key=tag_dict[59], bound=[None, 6.0], min_failures=15)
+                pm.check_range(key=tag_dict[67], bound=[0.15, None], min_failures=2)
+                #pm.check_range(key=tag_dict[68], bound=[0.15, None], min_failures=2)
+                pm.check_range(key=tag_dict[86], bound=[0.05, None], min_failures=2)
+                pm.check_range(key=tag_dict[59], bound=[None, 6.5], min_failures=15)
             else:
                 logger.warning(f'Incorrect logic for EventID {eventid}')
 
@@ -372,7 +376,7 @@ def main ():
             
             # Log event and modify colorblock if event is occurring
             if event_flags[eventid]:
-                logger.critical(f'Alert: {event_text} event is occurring, take action!')
+                logger.critical(f'Alert: {event_text} event occurred between {datetime_start} and {datetime_end}.')              
                 list_detected_events.append(f'{event_text}')
                 color = 0  # fill in colorblock if event is occurring
             else:
@@ -428,15 +432,13 @@ def main ():
     logger.info('Writing Pecos results to dashboard.')  
     events = ['Process', 'Monitoring', 'Water Quality 1', 'Water Quality 2']
     processes = ['MF', 'RO', 'UVAOP', 'Ozone']
-    dashboard_file = f'dashboard_{results_directory}.html'
 
     pecos.io.write_dashboard(column_names=events, row_names=processes, 
                              content=dashboard_content, title='Direct Potable Reuse Monitoring Dashboard',
-                            filename=dashboard_file)
+                            filename=path_dashboard_html)
 
     ## Write CSS to dashboard file
-    path_dashboard_file = os.path.join(path_working, dashboard_file)
-    with open(path_dashboard_file, 'a') as f:
+    with open(path_dashboard_html, 'a') as f:
         css_file = os.path.join(path_working, 'style1.css')
         html_content = f'<link rel="stylesheet" type="text/css" href="{css_file}">\n'
         logo_file = os.path.join(path_working, 'logo_all.png')
@@ -445,7 +447,7 @@ def main ():
 
     # Send notification if any new events have occurred since last time script was run
     logger.info('Checking event flags and sending notifications, if necessary.')
-    if notify == True:  # only send notifications if script is running live
+    if notify == True:  # only send notifications if True
         # Read in events from previous run
         if os.path.exists(path_events_json):
             with open(path_events_json, 'r') as f:
@@ -461,41 +463,23 @@ def main ():
 
         # If new events have occurred, send notification
         if len(list_new_events) > 0:
-            logger.info('New event(s) detected. Sending notification.')
-            message = f"New event(s) detected. Refresh the dashboard to review the events: {list_new_events}"
+            logger.info('New event type(s) detected since last time script was run. Sending notification.')
+            message = f"New event type(s) detected. Refresh the dashboard to review the events: {list_new_events}"
             notification.notify(title="Alert!", message=message)
             events_json['events'] = list_detected_events  # update events_json
             with open(path_events_json, 'w') as f:
                 json.dump(events_json, f)
         else:
-            logger.info('No new events have occurred since last time script was run.')
+            logger.info('No new event type(s) have occurred since last time script was run.')
 
 if __name__ == '__main__':
+    
+    # Suppress future warnings
+    warnings.simplefilter(action='ignore', category=FutureWarning)
     
     # Initialize logger in current working directory
     path_log = os.path.join(path_working, 'dashboard.log')
     logger.add(path_log, retention='365 days', level='INFO', rotation='30 days', compression='zip')
 
-    # Run the main function for 24 hour time periods
-    # This is to test the script for a full month of data.
-    # After running the script each time, pause for user input to continue to the next time period.
-
-    start_datetime = datetime(2023, 5, 18, 0, 0, 0)
-    end_datetime = datetime(2023, 5, 18, 23, 59, 59)
-
-    # For loop to run the main function for each 24 hour time period
-    for i in range(31):
-
-        # Convert datetime to "YYYY-MM-DD HH:MM:SS" format
-        user_datetime_start = start_datetime.strftime("%Y-%m-%d %H:%M:%S")
-        user_datetime_end = end_datetime.strftime("%Y-%m-%d %H:%M:%S")
-
-        # Run main function
-        main()
-
-        # Pause for user input to continue to the next time period
-        input("Press Enter to continue to next time period...")
-
-        # Increment start and end datetimes by 24 hours
-        start_datetime += timedelta(days=1)
-        end_datetime += timedelta(days=1)
+    # Run main function
+    main()
