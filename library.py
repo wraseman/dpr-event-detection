@@ -313,7 +313,7 @@ def check_tagids_missing_from_csv(df_data, df_tags):
     except:
         logger.warning(f'check_tagids_missing_from_csv(): Warning! TagID cannot be converted into int.')
 
-    csv_tagids = set(df_tags['TagID'])  # convert from dataframe to a set
+    csv_tagids = set(df_data['TagID'])  # convert from dataframe to a set
 
     ## Get a set of TagIDs from config file
     config_tagids = set(df_tags['TagID'])
