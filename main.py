@@ -44,7 +44,7 @@ from plyer import notification
 # end_datetime = datetime.now()  # live mode
 # start_datetime =  end_datetime - timedelta(hours = event_window_hrs)  # live mode
 start_datetime = datetime(2023, 6, 8, 14, 0, 0)  # historical mode (year, month, day, hour, minute, second)
-end_datetime = datetime(2023, 6, 8, 23, 59, 59)  # historical mode (year, month, day, hour, minute, second)
+end_datetime = datetime(2023, 6, 8, 16, 59, 59)  # historical mode (year, month, day, hour, minute, second)
 
 # ## SQL database connection information
 # server = 
@@ -167,7 +167,7 @@ def main ():
 
     # For tags related to error or difference calculations, modify the data to be the absolute value of error/difference. 
     # This is to ensure that the data is always positive to avoid errors in the Pecos logic.
-    tags_err_diff = [tag_dict[86], tag_dict[67], tag_dict[68], tag_dict[92]]
+    tags_err_diff = [tag_dict[86], tag_dict[67], tag_dict[68], tag_dict[91], tag_dict[92]]
     logger.info(f'Modifying data for error/difference tags. Calculating absolute value for {tags_err_diff}.')
 
     for tag in tags_err_diff:
@@ -214,9 +214,9 @@ def main ():
     # If OSP 4 Hach Meter and Rosemount meter difference is LESS than 15%, 
     # and OSP 7 Hach Meter and Rosemount meter difference is LESS than 15%,
     # and ozone production error is LESS than 5%, 
-    # and ozone demand is greater than 6.0 mg/L, 
+    # and ozone demand is greater than 6.5 mg/L, 
     # then Ozone Water Quality = 1, else 0.
-    cond1 = (df_wide[tag_dict[67]] < 0.15)  # don't apply missing value logic here
+    cond1 = (df_wide[tag_dict[91]] < 0.15)  # don't apply missing value logic here
     #cond2 = (df_wide[tag_dict[68]] < 0.15)  # don't apply missing value logic here #archived condition 7.6.23
     cond3 = (df_wide[tag_dict[86]] < 0.05)  # don't apply missing value logic here
     cond4 = (df_wide[tag_dict[59]] > 6.5) | (df_wide[tag_dict[59]].isna())
@@ -360,7 +360,7 @@ def main ():
             elif eventid == 15:
                 # Ozone Water Quality 1
                 pm.check_range(key=name_ozone_wq1, bound=[None, 0], min_failures=15)
-                pm.check_range(key=tag_dict[67], bound=[0.15, None], min_failures=2)
+                pm.check_range(key=tag_dict[91], bound=[0.15, None], min_failures=2)
                 #pm.check_range(key=tag_dict[68], bound=[0.15, None], min_failures=2)
                 pm.check_range(key=tag_dict[86], bound=[0.05, None], min_failures=2)
                 pm.check_range(key=tag_dict[59], bound=[None, 6.5], min_failures=15)
