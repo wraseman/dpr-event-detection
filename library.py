@@ -166,91 +166,182 @@ def convert_items_to_list_of_ints(event_dict):
 
     return event_dict
 
-def create_engine(driver, server, database, username, password):
+# def create_engine(driver, server, database, username, password):
+#     """
+#     Create engine with the project's SQL database.
+
+#     Args:
+#         driver (str): SQL driver name.
+#         server (str): SQL server name.
+#         database (str): SQL database name.
+#         username (str): SQL username.
+#         password (str): SQL password.
+
+#     Returns:
+#         sqlalchemy.engine: Engine object for the project's SQL database.
+#     """
+
+#     # Create SQL engine to read/write table data
+#     cnxn_url= urllib.parse.quote_plus(f'DRIVER={driver};SERVER={server};DATABASE={database};UID={username};PWD={password}')
+#     engine = sa.create_engine(f'mssql+pyodbc:///?odbc_connect={cnxn_url}')
+
+#     # Check the connection
+#     try:
+#         conn = engine.connect()
+#         logger.info('Database connection test successful.')
+#         conn.close()
+#     except Exception as e:
+#         logger.error(f'Database connection test failed: {e}')
+
+#     return engine
+
+# def check_tagids_missing_from_sql(engine, df, table, datetime_col, datetime_start, datetime_end):
+#     """
+#     Compare the TagIDs in the SQL database to the TagIDs in the configuration file. 
+#     If there are TagIDs in the configuration file that are not found in the SQL database, 
+#     log a warning with the TagIDs that are missing from the database.
+
+#     Args:
+#         engine (sqlalchemy.engine.base.Engine): SQLAlchemy connection engine.
+#         df (pandas.DataFrame): Dataframe of tags table.
+
+#     Returns: 
+#         list_missing_tagids (list): List of TagIDs that are missing from the SQL database.
+#     """
+
+#     ## Get a set of TagIDs from SQL database for datetime range
+#     logger.info('compare_sql_config_tags(): querying TagIDs from SQL database.')
+#     query1 = f'SELECT DISTINCT TagID FROM {table} WHERE {datetime_col} >= \'{datetime_start}\' AND {datetime_col} < \'{datetime_end}\''
+#     df_sql = pd.read_sql(query1, engine)
+
+#     # Convert TagID to int
+#     try:
+#         df_sql['TagID'] = df_sql['TagID'].astype(int)
+#     except:
+#         logger.warning(f'compare_sql_config_tags(): Warning! TagID cannot be converted into int.')
+
+#     sql_tagids = set(df_sql['TagID'])  # convert from dataframe to a set
+
+#     ## Get a set of TagIDs from config file
+#     config_tagids = set(df['TagID'])
+
+#     ## Compare the two sets of TagIDs. If there are TagIDs in the config file that aren't found in the database, log a warning with the TagIDs that are missing from the database
+#     if config_tagids.issubset(sql_tagids) == False:
+#         missing_tagids = config_tagids - sql_tagids
+#         logger.warning(f'The following TagIDs are missing from the database: {missing_tagids}')
+#         list_missing_tagids = df[df['TagID'].isin(missing_tagids)]
+#     else:
+#         logger.info('All TagIDs in the config file are found in the database.')
+#         list_missing_tagids = []
+
+#     return list_missing_tagids
+
+
+# def create_df_from_sql(engine, table, datetime_start, datetime_end, tagid_set, datetime_col="[DateTime]"):
+#     """
+#     Create a dataframe from a subset of the project's SQL database.
+
+#     Args:
+#         engine (sqlalchemy.engine): SQL engine to read/write table data.
+#         table (str): SQL table name.
+#         datetime_start (datetime): Start datetime for query.
+#         datetime_end (datetime): End datetime for query.
+#         tagid_set (set): Set of tagids to query.
+#         datetime_col (str): Datetime column name in SQL database.
+
+#     Returns:
+#         pandas.DataFrame: Dataframe of SQL query results.
+
+#     Warns:
+#         UserWarning: If tagid_set cannot be converted to type set.
+#     """
+
+#     # Convert tagid_set to type set, if cannot convert, log a warning
+#     try:
+#         tagid_set = set(tagid_set)
+#     except:
+#         logger.warning('create_df_from_sql(): tagid_set cannot be converted to a set.')
+    
+#     # Convert set to a string to pass to SQL query
+#     tagid_str = '(' + ', '.join(str(e) for e in tagid_set) + ')'
+    
+#     # Set up query
+#     query= f'SELECT * FROM {table} WHERE {datetime_col} >= \'{datetime_start}\' AND {datetime_col} < \'{datetime_end}\' AND TagID IN {tagid_str}'
+
+#     # Use pandas to query the database and return a pandas dataframe
+#     sql_df = pd.read_sql(query, engine)
+
+#     # Convert TagID to int
+#     try:
+#         sql_df['TagID'] = sql_df['TagID'].astype(int)
+#     except:
+#         logger.warning(f'create_df_from_sql(): Warning! TagID cannot be converted into int.')
+
+#     if datetime_col == '[DateTime]':
+#         sql_df = sql_df.rename(columns={'DateTime':'Datetime'})
+
+#     # Truncate datetimes with seconds on the minute containing the seconds
+#     sql_df['Datetime'] = pd.to_datetime(sql_df['Datetime'])
+#     sql_df['Datetime'] = sql_df['Datetime'].dt.floor('min')
+
+#     # Check if dataframe is empty. If so, log an error and exit the program.
+#     if sql_df.empty:
+#         logger.error(f'create_df_from_sql(): Error! No data found in {table} between {datetime_start} and {datetime_end}. Exiting program.')
+#         sys.exit()
+        
+#     # Drop duplicates
+#     sql_df = sql_df.drop_duplicates(subset=['TagID','Datetime'], keep='first').reset_index(drop=True)
+    
+#     return sql_df
+
+def check_tagids_missing_from_csv(df_data, df_tags):
     """
-    Create engine with the project's SQL database.
+    Compare the TagIDs in the CSV dataset to the TagIDs in the configuration file. 
+    If there are TagIDs in the configuration file that are not found in the CSV, 
+    log a warning with the TagIDs that are missing from the dataset.
 
     Args:
-        driver (str): SQL driver name.
-        server (str): SQL server name.
-        database (str): SQL database name.
-        username (str): SQL username.
-        password (str): SQL password.
-
-    Returns:
-        sqlalchemy.engine: Engine object for the project's SQL database.
-    """
-
-    # Create SQL engine to read/write table data
-    cnxn_url= urllib.parse.quote_plus(f'DRIVER={driver};SERVER={server};DATABASE={database};UID={username};PWD={password}')
-    engine = sa.create_engine(f'mssql+pyodbc:///?odbc_connect={cnxn_url}')
-
-    # Check the connection
-    try:
-        conn = engine.connect()
-        logger.info('Database connection test successful.')
-        conn.close()
-    except Exception as e:
-        logger.error(f'Database connection test failed: {e}')
-
-    return engine
-
-def check_tagids_missing_from_sql(engine, df, table, datetime_col, datetime_start, datetime_end):
-    """
-    Compare the TagIDs in the SQL database to the TagIDs in the configuration file. 
-    If there are TagIDs in the configuration file that are not found in the SQL database, 
-    log a warning with the TagIDs that are missing from the database.
-
-    Args:
-        engine (sqlalchemy.engine.base.Engine): SQLAlchemy connection engine.
         df (pandas.DataFrame): Dataframe of tags table.
+        datetime_col (str): Datetime column name in CSV file.
 
     Returns: 
-        list_missing_tagids (list): List of TagIDs that are missing from the SQL database.
+        list_missing_tagids (list): List of TagIDs that are missing.
     """
-
-    ## Get a set of TagIDs from SQL database for datetime range
-    logger.info('compare_sql_config_tags(): querying TagIDs from SQL database.')
-    query1 = f'SELECT DISTINCT TagID FROM {table} WHERE {datetime_col} >= \'{datetime_start}\' AND {datetime_col} < \'{datetime_end}\''
-    df_sql = pd.read_sql(query1, engine)
-
     # Convert TagID to int
     try:
-        df_sql['TagID'] = df_sql['TagID'].astype(int)
+        df_tags['TagID'] = df_tags['TagID'].astype(int)
     except:
-        logger.warning(f'compare_sql_config_tags(): Warning! TagID cannot be converted into int.')
+        logger.warning(f'check_tagids_missing_from_csv(): Warning! TagID cannot be converted into int.')
 
-    sql_tagids = set(df_sql['TagID'])  # convert from dataframe to a set
+    csv_tagids = set(df_tags['TagID'])  # convert from dataframe to a set
 
     ## Get a set of TagIDs from config file
-    config_tagids = set(df['TagID'])
+    config_tagids = set(df_tags['TagID'])
 
     ## Compare the two sets of TagIDs. If there are TagIDs in the config file that aren't found in the database, log a warning with the TagIDs that are missing from the database
-    if config_tagids.issubset(sql_tagids) == False:
-        missing_tagids = config_tagids - sql_tagids
+    if config_tagids.issubset(csv_tagids) == False:
+        missing_tagids = config_tagids - csv_tagids
         logger.warning(f'The following TagIDs are missing from the database: {missing_tagids}')
-        list_missing_tagids = df[df['TagID'].isin(missing_tagids)]
+        list_missing_tagids = df_tags[df_tags['TagID'].isin(missing_tagids)]
     else:
         logger.info('All TagIDs in the config file are found in the database.')
         list_missing_tagids = []
 
     return list_missing_tagids
 
-
-def create_df_from_sql(engine, table, datetime_start, datetime_end, tagid_set, datetime_col="[DateTime]"):
+def create_df_from_csv(path_data, datetime_start, datetime_end, tagid_set, datetime_col="DateTime"):
     """
-    Create a dataframe from a subset of the project's SQL database.
+    Create a dataframe from a subset of a CSV file. 
 
     Args:
-        engine (sqlalchemy.engine): SQL engine to read/write table data.
-        table (str): SQL table name.
-        datetime_start (datetime): Start datetime for query.
-        datetime_end (datetime): End datetime for query.
-        tagid_set (set): Set of tagids to query.
-        datetime_col (str): Datetime column name in SQL database.
+        path_data (str): Path to CSV file.
+        datetime_start (datetime): Start datetime to subset.
+        datetime_end (datetime): End datetime to subset.
+        tagid_set (set): Set of tagids to subset.
+        datetime_col (str): Datetime column name in CSV file.
 
     Returns:
-        pandas.DataFrame: Dataframe of SQL query results.
+        pandas.DataFrame: Dataframe of CSV subset.
 
     Warns:
         UserWarning: If tagid_set cannot be converted to type set.
@@ -260,39 +351,30 @@ def create_df_from_sql(engine, table, datetime_start, datetime_end, tagid_set, d
     try:
         tagid_set = set(tagid_set)
     except:
-        logger.warning('create_df_from_sql(): tagid_set cannot be converted to a set.')
+        logger.warning('create_df_from_csv(): tagid_set cannot be converted to a set.')
     
-    # Convert set to a string to pass to SQL query
-    tagid_str = '(' + ', '.join(str(e) for e in tagid_set) + ')'
+    # Read CSV file into a dataframe
+    df = pd.read_csv(path_data, parse_dates=[datetime_col])
     
-    # Set up query
-    query= f'SELECT * FROM {table} WHERE {datetime_col} >= \'{datetime_start}\' AND {datetime_col} < \'{datetime_end}\' AND TagID IN {tagid_str}'
+    if datetime_col == 'DateTime':
+        df = df.rename(columns={'DateTime':'Datetime'})
 
-    # Use pandas to query the database and return a pandas dataframe
-    sql_df = pd.read_sql(query, engine)
-
-    # Convert TagID to int
-    try:
-        sql_df['TagID'] = sql_df['TagID'].astype(int)
-    except:
-        logger.warning(f'create_df_from_sql(): Warning! TagID cannot be converted into int.')
-
-    if datetime_col == '[DateTime]':
-        sql_df = sql_df.rename(columns={'DateTime':'Datetime'})
+    # Subset to datetime range and only include tagids in tagid_set
+    df = df[(df['Datetime'] >= datetime_start) & (df['Datetime'] < datetime_end) & (df['TagID'].isin(tagid_set))]
 
     # Truncate datetimes with seconds on the minute containing the seconds
-    sql_df['Datetime'] = pd.to_datetime(sql_df['Datetime'])
-    sql_df['Datetime'] = sql_df['Datetime'].dt.floor('min')
+    df['Datetime'] = pd.to_datetime(df['Datetime'])
+    df['Datetime'] = df['Datetime'].dt.floor('min')
 
     # Check if dataframe is empty. If so, log an error and exit the program.
-    if sql_df.empty:
-        logger.error(f'create_df_from_sql(): Error! No data found in {table} between {datetime_start} and {datetime_end}. Exiting program.')
+    if df.empty:
+        logger.error(f'create_df_from_csv(): Error! No data found in {path_data} between {datetime_start} and {datetime_end}. Exiting program.')
         sys.exit()
-        
+
     # Drop duplicates
-    sql_df = sql_df.drop_duplicates(subset=['TagID','Datetime'], keep='first').reset_index(drop=True)
-    
-    return sql_df
+    df = df.drop_duplicates(subset=['TagID','Datetime'], keep='first').reset_index(drop=True)
+
+    return df
 
 def check_for_missing_status_tag(df_wide, tag):
     """

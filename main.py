@@ -40,27 +40,31 @@ from plyer import notification
 ############################################# USER INPUTS #############################################
 
 ## User defined date range
-event_window_hrs = 1  # hours (during live mode, how many hours to include in event monitoring)
-end_datetime = datetime.now()  # live mode
-start_datetime =  end_datetime - timedelta(hours = event_window_hrs)  # live mode
-# start_datetime = datetime(2023, 6, 8, 14, 0, 0)  # historical mode (year, month, day, hour, minute, second)
-# end_datetime = datetime(2023, 6, 8, 23, 59, 59)  # historical mode (year, month, day, hour, minute, second)
+# event_window_hrs = 1  # hours (during live mode, how many hours to include in event monitoring)
+# end_datetime = datetime.now()  # live mode
+# start_datetime =  end_datetime - timedelta(hours = event_window_hrs)  # live mode
+start_datetime = datetime(2023, 6, 8, 14, 0, 0)  # historical mode (year, month, day, hour, minute, second)
+end_datetime = datetime(2023, 6, 8, 23, 59, 59)  # historical mode (year, month, day, hour, minute, second)
 
-## SQL database connection information
-server = 
-database = 
-username = 
-password = 
-driver = 
-table = 
-datetime_col = 
+# ## SQL database connection information
+# server = 
+# database = 
+# username = 
+# password = 
+# driver = 
+# table = 
+# datetime_col = 
 
 ## User defined paths
-path_working = r"C:\Users\HMI103\Desktop\DPR Event Monitoring\live"
+path_working = r"C:\Documents\dpr-event-detection"  # set working directory
+path_data = r"C:\Documents\dpr-event-detection\data\data2test.csv"
 path_config = os.path.join(path_working, 'config.xlsx')
 path_events_json = os.path.join(path_working, 'events.json')
 path_dashboard_html = os.path.join(path_working, 'dashboard.html')
 results_directory = os.path.join(path_working, 'dashboard')
+
+## Column naming conventions
+datetime_col = 'DateTime'  # name of datetime column in data file
 
 ## Outputs
 save_plots = True  # save plots as png files
@@ -70,7 +74,7 @@ notify = True  # send notifications
 
 def main (): 
 
-    # Reformat datetime for SQL query
+    # Reformat datetime
     datetime_start_str = start_datetime.strftime("%Y-%m-%d %H:%M:%S")
     datetime_end_str = end_datetime.strftime("%Y-%m-%d %H:%M:%S")
     datetime_start = datetime_start_str
@@ -92,12 +96,12 @@ def main ():
     df_events = pd.read_excel(path_config, sheet_name='Events')
     check_events_table(df_events)
 
-    ## Create engine to connect to project's SQL database 
-    logger.info('Creating engine for SQL database.')
-    engine = create_engine(driver, server, database, username, password)
+    # ## Create engine to connect to project's SQL database 
+    # logger.info('Creating engine for SQL database.')
+    # engine = create_engine(driver, server, database, username, password)
 
-    ## Check for TagIDs in config file that are not in the database
-    check_tagids_missing_from_sql(engine, df_tags, table, datetime_col, datetime_start, datetime_end)
+    # ## Check for TagIDs in config file that are not in the database
+    # check_tagids_missing_from_sql(engine, df_tags, table, datetime_col, datetime_start, datetime_end)
 
     ## Convert Tag and TagID columns to a dictionary
     tag_dict = dict(zip(df_tags['TagID'], df_tags['Tag (Units)']))
@@ -107,14 +111,24 @@ def main ():
     event_dict = convert_items_to_list_of_ints(event_dict) # convert items to list of ints
     event_flags = dict.fromkeys(range(1, len(event_dict) + 1), False) # initialize event flags to False
 
-    # Read in data from SQL database
+    # # Read in data from SQL database
+
+    # ## Only include datetime range that is specified
+    # tagid_set = set(tag_dict.keys())  # only include TagIDs that are in the config file
+    # logger.info(f'Querying data from SQL database between {datetime_start} and {datetime_end}.')
+    # df = create_df_from_sql(engine, table, datetime_start, datetime_end, tagid_set, datetime_col)
+
+    # Read in data from CSV dataset
 
     ## Only include datetime range that is specified
     tagid_set = set(tag_dict.keys())  # only include TagIDs that are in the config file
-    logger.info(f'Querying data from SQL database between {datetime_start} and {datetime_end}.')
-    df = create_df_from_sql(engine, table, datetime_start, datetime_end, tagid_set, datetime_col)
+    logger.info(f'Reading data from CSV between {datetime_start} and {datetime_end}.')
+    df = create_df_from_csv(path_data, datetime_start, datetime_end, tagid_set, datetime_col)
 
-    # Add Tag to SQL data based on TagID using the tag_dict dictionary
+    ## Check for TagIDs in config file that are not in the dataset
+    check_tagids_missing_from_csv(df_data=df, df_tags=df_tags)
+
+    # Add Tag to CSV data based on TagID using the tag_dict dictionary
     df['Tag'] = df['TagID'].map(tag_dict)   
     df1 = df[['Datetime', 'Tag', 'Value']]  # only keep Datetime, Tag, and Value columns
 
