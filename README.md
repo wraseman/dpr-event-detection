@@ -1,6 +1,8 @@
 # Event Detection Framework for Direct Potable Reuse
 Code for event detection framework for proactive and rapid response to critical control point (CCP) failures for direct potable reuse (DRP) facilities. 
 
+![image](https://github.com/wraseman/dpr-event-detection/assets/14048152/9708750b-5421-4f2a-b645-132ea502e271)
+
 # Background
 DPR is the planned introduction of recycled water into a public drinking water system or upstream of a raw water intake to a drinking water plant. The key feature distinguishing DPR from indirect potable reuse (IPR) is the loss of an environmental buffer. Without a buffer, treated water from DPR facilities can reach customers in hours or minutes. Therefore, CCP failures must be detected and resolved in less than that time to avoid sending out off spececification water to customers. The event detection framework aims to identify software-based solutions to support proactive and rapid responses to DPR failures. To do so, the framework is designed to increase lead time and decrease time for event detection and resolution.
 
