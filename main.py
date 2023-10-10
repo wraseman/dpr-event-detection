@@ -37,14 +37,33 @@ from plyer import notification
 # 4. Generating HTML reports for time series data
 # 5. Performing quality control on time series data
 
+# See below example events available in datasets. Specify dataset path and datetime range to accordingly. 
+"""
+Event                                           Start datetime      End datetime
+Dataset 1 (data1.csv):
+    RO Process (Membrane Breach)                12/20/22 8:00       12/20/22 10:09
+    RO Monitoring (Feed TOC Drift)              12/20/22 10:22      12/20/22 11:41
+    MF Process (High Turbidity)                 12/20/22 11:30      12/20/22 13:30
+    UV Process (Low UV Dose)                    3/24/23 9:00        3/24/23 12:00
+    UV Monitoring (UV Intensity Stagnant)       3/24/23 9:00        3/24/23 12:00
+    UV Water Quality (Low UV Feed UVT)          3/24/23 9:00        3/24/23 12:00
+
+Dataset 2 (data2.csv):
+    MF Monitoring (Stagnant)                    6/8/23 15:30        6/8/23 16:12
+    RO Water Quality (Chemical Peak)            6/8/23 15:30        6/8/23 17:00
+    Ozone Process (Generator Failure)           6/30/23 13:25       6/30/23 14:24
+    Ozone Water Quality (High Demand)           6/30/23 15:30       7/1/23 14:00
+    Ozone Monitoring (Meter Drift)              8/31/23 11:00       8/31/23 19:00
+"""
+
 ############################################# USER INPUTS #############################################
 
 ## User defined date range
 # event_window_hrs = 1  # hours (during live mode, how many hours to include in event monitoring)
 # end_datetime = datetime.now()  # live mode
 # start_datetime =  end_datetime - timedelta(hours = event_window_hrs)  # live mode
-start_datetime = datetime(2023, 6, 8, 14, 0, 0)  # historical mode (year, month, day, hour, minute, second)
-end_datetime = datetime(2023, 6, 8, 16, 59, 59)  # historical mode (year, month, day, hour, minute, second)
+start_datetime = datetime(2023, 6, 8, 15, 0, 0)  # historical mode (year, month, day, hour, minute, second)
+end_datetime = datetime(2023, 6, 8, 17, 59, 59)  # historical mode (year, month, day, hour, minute, second)
 
 # ## SQL database connection information
 # server = 
@@ -57,11 +76,11 @@ end_datetime = datetime(2023, 6, 8, 16, 59, 59)  # historical mode (year, month,
 
 ## User defined paths
 path_working = r"C:\Documents\dpr-event-detection"  # set working directory
-path_data = r"C:\Documents\dpr-event-detection\data\data2test.csv"
-path_config = os.path.join(path_working, 'config.xlsx')
-path_events_json = os.path.join(path_working, 'events.json')
-path_dashboard_html = os.path.join(path_working, 'dashboard.html')
-results_directory = os.path.join(path_working, 'dashboard')
+path_data = r"C:\Documents\dpr-event-detection\data\data2.csv"  # path to CSV dataset
+path_config = os.path.join(path_working, 'config.xlsx')  # path to config file
+path_events_json = os.path.join(path_working, 'events.json')  # path to events log file (most useful in live mode)
+path_dashboard_html = os.path.join(path_working, 'dashboard.html')  # path to dashboard file (open this to view dashboard output)
+results_directory = os.path.join(path_working, 'dashboard')  # path to directory where dashboard components will be saved
 
 ## Column naming conventions
 datetime_col = 'DateTime'  # name of datetime column in data file
@@ -171,7 +190,10 @@ def main ():
     logger.info(f'Modifying data for error/difference tags. Calculating absolute value for {tags_err_diff}.')
 
     for tag in tags_err_diff:
-        df_wide[tag] = df_wide[tag].abs()
+        try:
+            df_wide[tag] = df_wide[tag].abs()
+        except KeyError:
+            logger.warning(f"{tag} not found in dataframe. Moving on...")
 
     # RO events: create calculated columns for RO events
     logger.info('Creating calculated columns for RO events.')
